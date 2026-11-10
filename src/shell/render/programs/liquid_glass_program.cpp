@@ -39,6 +39,7 @@ uniform sampler2D u_raw;
 uniform sampler2D u_frost;
 uniform vec4 u_region;   // copied region: origin and size in framebuffer px (y-up)
 uniform vec2 u_scale;    // framebuffer px per logical px
+uniform vec2 u_flip;     // -1 on an axis the node's transform mirrors
 uniform vec2 u_size;     // logical
 uniform float u_radius;  // logical
 uniform vec4 u_tint;     // premultiplied
@@ -66,7 +67,7 @@ float sdRoundBox(vec2 p, vec2 b, float r) {
 
 // Texture coordinate of the fragment moved by o logical px (y-down).
 vec2 at(vec2 o) {
-    vec2 frag = gl_FragCoord.xy + vec2(o.x, -o.y) * u_scale;
+    vec2 frag = gl_FragCoord.xy + vec2(o.x, -o.y) * u_flip * u_scale;
     return (frag - u_region.xy) / u_region.zw;
 }
 
@@ -155,6 +156,7 @@ void LiquidGlassProgram::ensureInitialized() {
   m_frostLocation = glGetUniformLocation(id, "u_frost");
   m_regionLocation = glGetUniformLocation(id, "u_region");
   m_scaleLocation = glGetUniformLocation(id, "u_scale");
+  m_flipLocation = glGetUniformLocation(id, "u_flip");
   m_radiusLocation = glGetUniformLocation(id, "u_radius");
   m_tintLocation = glGetUniformLocation(id, "u_tint");
   m_opacityLocation = glGetUniformLocation(id, "u_opacity");
@@ -167,6 +169,7 @@ void LiquidGlassProgram::ensureInitialized() {
       || m_frostLocation < 0
       || m_regionLocation < 0
       || m_scaleLocation < 0
+      || m_flipLocation < 0
       || m_radiusLocation < 0
       || m_tintLocation < 0
       || m_opacityLocation < 0) {
@@ -240,9 +243,12 @@ void LiquidGlassProgram::draw(RenderBackend& backend, const Params& params) {
   const auto viewportH = static_cast<float>(viewport[3]);
 
   // The rectangle in framebuffer px (y-up), padded so the frost and the fold read real pixels.
+  // Axis-aligned transforms only (translation, possibly mirrored); the caller skips rotations.
   const Mat3& m = params.transform;
-  const float left = m.m[6];
-  const float top = m.m[7];
+  const float flipX = m.m[0] < 0.0F ? -1.0F : 1.0F;
+  const float flipY = m.m[4] < 0.0F ? -1.0F : 1.0F;
+  const float left = std::min(m.m[6], m.m[6] + m.m[0] * params.width);
+  const float top = std::min(m.m[7], m.m[7] + m.m[4] * params.height);
   const float sx = params.pixelScaleX;
   const float sy = params.pixelScaleY;
   constexpr float kPad = 24.0F;
@@ -302,6 +308,7 @@ void LiquidGlassProgram::draw(RenderBackend& backend, const Params& params) {
   glUniformMatrix3fv(m_transformLocation, 1, GL_FALSE, params.transform.m.data());
   glUniform4f(m_regionLocation, regionX, regionY, static_cast<float>(regionW), static_cast<float>(regionH));
   glUniform2f(m_scaleLocation, sx, sy);
+  glUniform2f(m_flipLocation, flipX, flipY);
   glUniform1f(m_radiusLocation, params.radius);
   glUniform4f(m_tintLocation, params.tint.r, params.tint.g, params.tint.b, params.tint.a);
   glUniform1f(m_opacityLocation, params.opacity);

@@ -13,6 +13,7 @@
 #include "wayland/wayland_connection.h"
 
 #include <algorithm>
+#include <cmath>
 #include <string>
 
 namespace {
@@ -235,6 +236,8 @@ void LockscreenWidgetsHost::createInstance(
   }
 
   widget->create();
+  // The glass assumes an axis-aligned box; rotated widgets keep their plain background.
+  widget->setGlass(std::abs(state.rotationRad) < 1e-4F);
   widget->setBox(state.boxWidth, state.boxHeight);
 
   if (surface.renderTarget().isReady()) {

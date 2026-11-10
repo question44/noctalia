@@ -59,6 +59,7 @@ private:
   GLint m_frostLocation = -1;
   GLint m_regionLocation = -1;
   GLint m_scaleLocation = -1;
+  GLint m_flipLocation = -1;
   GLint m_radiusLocation = -1;
   GLint m_tintLocation = -1;
   GLint m_opacityLocation = -1;

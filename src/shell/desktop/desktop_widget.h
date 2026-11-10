@@ -14,6 +14,8 @@ class AnimationManager;
 class Box;
 class Renderer;
 
+class LiquidGlassNode;
+
 class DesktopWidget {
 public:
   using UpdateCallback = std::function<void()>;
@@ -79,6 +81,9 @@ public:
   // Desktop widget editor keeps widgets visible for layout even when runtime idle-hide applies.
   virtual void setEditorPreview(bool enabled) noexcept { (void)enabled; }
   void setBackgroundStyle(const ColorSpec& color, float radius, float padding);
+  // Liquid glass under the background box (lock screen only: it bends what the same surface drew
+  // underneath, and desktop widgets sit on their own transparent layer). Call before layout().
+  void setGlass(bool enabled) noexcept { m_glass = enabled; }
 
   bool hasBackground() const noexcept { return m_bgEnabled; }
   bool hasVisibleBackground() const noexcept;
@@ -162,12 +167,14 @@ protected:
   Node* m_contentRoot = nullptr;
   Node* m_outerRootPtr = nullptr;
   Box* m_bgBox = nullptr;
+  LiquidGlassNode* m_glassNode = nullptr;
   UpdateCallback m_updateCallback;
   LayoutCallback m_layoutCallback;
   RedrawCallback m_redrawCallback;
   FrameTickRequestCallback m_frameTickRequestCallback;
 
   bool m_bgEnabled = false;
+  bool m_glass = false;
   ColorSpec m_bgColor;
   float m_bgRadius = 0.0F;
   float m_bgPadding = 0.0F;

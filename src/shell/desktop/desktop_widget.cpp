@@ -1,5 +1,7 @@
 #include "shell/desktop/desktop_widget.h"
 
+#include "shell/render/liquid_glass_node.h"
+
 #include "core/ui_phase.h"
 #include "ui/builders.h"
 #include "ui/controls/box.h"
@@ -10,6 +12,9 @@
 #include <string>
 
 namespace {
+
+  // How much of the configured background stays as a tint over the glass.
+  constexpr float kGlassTintScale = 0.25F;
   constexpr float kMinContentFit = 0.05F;
   constexpr float kMaxContentFit = 20.0F;
 } // namespace
@@ -152,6 +157,9 @@ void DesktopWidget::setRoot(std::unique_ptr<Node> root) {
   m_contentRoot = root.get();
   m_outerRoot = ui::node({});
   if (m_bgEnabled) {
+    auto glass = std::make_unique<LiquidGlassNode>();
+    glass->setVisible(false);
+    m_glassNode = static_cast<LiquidGlassNode*>(m_outerRoot->addChild(std::move(glass)));
     auto bg = ui::box({});
     m_bgBox = bg.get();
     m_outerRoot->addChild(std::move(bg));
@@ -242,8 +250,21 @@ void DesktopWidget::applyBackground() {
   if (m_bgEnabled && m_bgBox != nullptr) {
     m_bgBox->setPosition(0.0F, 0.0F);
     m_bgBox->setSize(boxW, boxH);
-    m_bgBox->setFill(m_bgColor);
     m_bgBox->setRadius(std::round(m_bgRadius * m_baseScale));
+    const bool glass = m_glass && m_glassNode != nullptr;
+    if (glass) {
+      // The glass draws the body and the rim; the box keeps a quarter of the fill as a tint.
+      m_glassNode->setPosition(0.0F, 0.0F);
+      m_glassNode->setSize(boxW, boxH);
+      m_glassNode->setRadius(std::round(m_bgRadius * m_baseScale));
+      m_glassNode->setTint(resolveColorSpec(scaleAlpha(m_bgColor, kGlassTintScale)));
+      m_bgBox->setFill(rgba(0.0F, 0.0F, 0.0F, 0.0F));
+    } else {
+      m_bgBox->setFill(m_bgColor);
+    }
+    if (m_glassNode != nullptr) {
+      m_glassNode->setVisible(glass);
+    }
   }
 
   Node* outerRoot = m_outerRoot ? m_outerRoot.get() : m_outerRootPtr;
