@@ -15,6 +15,7 @@
 #include "shell/lockscreen/lockscreen_transition_cover.h"
 #include "shell/lockscreen/lockscreen_widgets_host.h"
 #include "shell/render/blur_cache.h"
+#include "shell/render/liquid_glass_node.h"
 #include "shell/render/wallpaper_node.h"
 #include "shell/session/session_action_meta.h"
 #include "shell/session/session_action_runner.h"
@@ -153,6 +154,9 @@ namespace {
     return formatStrftime("%Y-%m-%d", tm);
   }
 
+  // How much of the login box's configured fill is kept as a tint over the glass.
+  constexpr float kGlassTintScale = 0.25F;
+
 } // namespace
 
 LockSurface::LockSurface(WaylandConnection& connection, ConfigService* config) : Surface(connection), m_config(config) {
@@ -185,6 +189,14 @@ LockSurface::LockSurface(WaylandConnection& connection, ConfigService* config) :
     auto widgetLayer = ui::node({});
     widgetLayer->setZIndex(2);
     m_widgetLayer = m_root.addChild(std::move(widgetLayer));
+  }
+
+  // Liquid glass under the login box: same z-index, added first, so it draws right before it.
+  {
+    auto glass = std::make_unique<LiquidGlassNode>();
+    glass->setZIndex(2);
+    glass->setParticipatesInLayout(false);
+    m_loginGlass = static_cast<LiquidGlassNode*>(m_root.addChild(std::move(glass)));
   }
 
   m_root.addChild(
@@ -491,6 +503,14 @@ LockSurface::LockSurface(WaylandConnection& connection, ConfigService* config) :
             .textAlign = TextAlign::Center,
         })
     );
+  }
+
+  {
+    auto glass = std::make_unique<LiquidGlassNode>();
+    glass->setZIndex(7);
+    glass->setParticipatesInLayout(false);
+    glass->setVisible(false);
+    m_authGlass = static_cast<LiquidGlassNode*>(m_root.addChild(std::move(glass)));
   }
 
   // Auth panel is a sibling of the login panel (child of root), not a flex row inside it.
@@ -1197,6 +1217,8 @@ void LockSurface::layoutCoverOnly(std::uint32_t width, std::uint32_t height) {
   m_backgroundLayer->setVisible(false);
   m_widgetLayer->setVisible(false);
   m_loginPanel->setVisible(false);
+  m_loginGlass->setVisible(false);
+  m_authGlass->setVisible(false);
   m_authPanel->setVisible(false);
   layoutTransitionCover();
   syncTransitionCover();
@@ -1333,6 +1355,8 @@ void LockSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
     );
     m_widgetLayer->setVisible(false);
     m_loginPanel->setVisible(false);
+    m_loginGlass->setVisible(false);
+    m_authGlass->setVisible(false);
     m_passwordField->setVisible(false);
     if (m_passwordRevealButton != nullptr) {
       m_passwordRevealButton->setVisible(false);
@@ -1440,8 +1464,12 @@ void LockSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
     }
   }
 
-  m_loginPanel->setFill(loginStyle.panelFill);
-  m_loginPanel->setBorder(colorForRole(ColorRole::OutlineVariant, loginStyle.panelOpacity), Style::borderWidth);
+  // The panel itself stays clear: the glass under it draws the body, the tint and the rim.
+  const Color glassTint = resolveColorSpec(scaleAlpha(loginStyle.panelFill, kGlassTintScale));
+  m_loginPanel->setFill(rgba(0.0F, 0.0F, 0.0F, 0.0F));
+  m_loginPanel->setBorder(rgba(0.0F, 0.0F, 0.0F, 0.0F), 0.0F);
+  m_loginGlass->setTint(glassTint);
+  m_loginGlass->setRadius(Style::scaledRadius(loginStyle.panelRadius));
   m_loginPanel->setRadius(Style::scaledRadius(loginStyle.panelRadius));
   m_loginPanel->setSoftness(1.0F);
   m_loginPanel->setClipChildren(true);
@@ -1671,6 +1699,9 @@ void LockSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   }
 
   m_loginPanel->arrange(renderer, LayoutRect{panelX, panelY, panelWidth, panelHeight});
+  m_loginGlass->setVisible(loginVisible);
+  m_loginGlass->setPosition(panelX, panelY);
+  m_loginGlass->setSize(panelWidth, panelHeight);
 
   // Auth panel: sibling above/below the login box (flips below when near the top edge).
   if (m_authPanel != nullptr && m_authLabel != nullptr) {
@@ -1678,6 +1709,7 @@ void LockSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
     const std::string authText = resolveStatusText(loginStyle, statusError);
     const bool showAuth = m_locked && !m_blackout && loginVisible && !authText.empty();
     m_authPanel->setVisible(showAuth);
+    m_authGlass->setVisible(showAuth);
     m_authLabel->setVisible(showAuth);
     if (showAuth) {
       m_authLabel->setText(authText);
@@ -1693,8 +1725,10 @@ void LockSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
       const float labelMaxW = std::max(0.0F, authW - authPadH * 2.0F);
 
       m_authPanel->setPadding(authPadV, authPadH);
-      m_authPanel->setFill(loginStyle.panelFill);
-      m_authPanel->setBorder(colorForRole(ColorRole::OutlineVariant, loginStyle.panelOpacity), Style::borderWidth);
+      m_authPanel->setFill(rgba(0.0F, 0.0F, 0.0F, 0.0F));
+      m_authPanel->setBorder(rgba(0.0F, 0.0F, 0.0F, 0.0F), 0.0F);
+      m_authGlass->setTint(glassTint);
+      m_authGlass->setRadius(Style::scaledRadius(loginStyle.panelRadius));
       m_authPanel->setRadius(Style::scaledRadius(loginStyle.panelRadius));
       m_authPanel->setSoftness(1.0F);
       m_authPanel->setMinWidth(authW);
@@ -1709,6 +1743,8 @@ void LockSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
       const float authYBelow = panelY + panelHeight + authGap;
       const float authY = (authYAbove >= Style::spaceLg) ? authYAbove : authYBelow;
       m_authPanel->arrange(renderer, LayoutRect{authX, authY, authW, authH});
+      m_authGlass->setPosition(authX, authY);
+      m_authGlass->setSize(authW, authH);
     }
   }
   layoutTransitionCover();
@@ -1737,6 +1773,7 @@ void LockSurface::updateCopy() {
     const std::string text = resolveStatusText(style, isError);
     const bool show = m_locked && !m_blackout && !text.empty() && isLoginBoxEnabled();
     m_authPanel->setVisible(show);
+    m_authGlass->setVisible(show);
     m_authLabel->setVisible(show);
     if (show) {
       m_authLabel->setText(text);

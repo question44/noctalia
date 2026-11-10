@@ -47,6 +47,8 @@ struct SessionPanelActionConfig;
 
 class LockscreenWidgetsHost;
 
+class LiquidGlassNode;
+
 class LockSurface : public Surface {
 public:
   explicit LockSurface(WaylandConnection& connection, ConfigService* config = nullptr);
@@ -168,6 +170,7 @@ private:
   WallpaperNode* m_wallpaper = nullptr;
   Box* m_tintOverlay = nullptr;
   Box* m_backdrop = nullptr;
+  LiquidGlassNode* m_loginGlass = nullptr;
   Flex* m_loginPanel = nullptr;
   Flex* m_infoRow = nullptr;
   Flex* m_mediaBlock = nullptr;
@@ -188,6 +191,7 @@ private:
   Label* m_weatherMeta = nullptr;
   Flex* m_forecastRow = nullptr;
   std::array<ForecastColumn, 5> m_forecastColumns{};
+  LiquidGlassNode* m_authGlass = nullptr;
   Flex* m_authPanel = nullptr;
   Label* m_authLabel = nullptr;
   Flex* m_loginContentRow = nullptr;
